@@ -305,9 +305,9 @@
             throw new Error(data.error);
           }
 
-          // Filter out Mock ASPSP from the API response (we add our own)
-          const filteredBanks = (data.aspsps || []).filter(b => b.name !== 'Mock ASPSP');
-          setBanks(filteredBanks);
+          // Only show banks that support payments (have payments field)
+          const paymentBanks = (data.aspsps || []).filter(b => b.payments && b.payments.length > 0);
+          setBanks(paymentBanks);
         } catch (err) {
           console.error('[Modal] Error fetching banks:', err);
           setError(`Failed to fetch banks: ${err.message}`);
@@ -504,24 +504,21 @@
                 ) : (
                   <>
                     <div className="bank-grid">
-                      {/* Single Mock ASPSP for testing - always at top */}
-                      <div
-                        className={`bank-card mock ${selectedBank?.name === 'Mock ASPSP' ? 'selected' : ''}`}
-                        onClick={() => handleSelectBank({ name: 'Mock ASPSP', country: selectedCountry })}
-                      >
-                        <div className="bank-name">Mock ASPSP</div>
-                        <div className="bank-country">Test Bank</div>
-                      </div>
                       {banks.map(bank => (
                         <div
                           key={bank.name}
-                          className={`bank-card ${selectedBank?.name === bank.name ? 'selected' : ''}`}
+                          className={`bank-card ${bank.sandbox ? 'mock' : ''} ${selectedBank?.name === bank.name ? 'selected' : ''}`}
                           onClick={() => handleSelectBank(bank)}
                         >
                           <div className="bank-name">{bank.name}</div>
-                          <div className="bank-country">{bank.country}</div>
+                          <div className="bank-country">{bank.country} {bank.sandbox ? '(Sandbox)' : ''}</div>
                         </div>
                       ))}
+                      {banks.length === 0 && (
+                        <div style={{gridColumn: '1 / -1', textAlign: 'center', padding: 20, color: '#888'}}>
+                          No banks with payment support found for this country
+                        </div>
+                      )}
                     </div>
                     <button
                       className="btn btn-primary"
@@ -564,9 +561,9 @@
                   Open Link (Test it yourself)
                 </button>
                 <div className="test-info">
-                  <strong>Mock ASPSP Test Credentials:</strong><br/>
-                  Username: <code>customera</code><br/>
-                  Password: <code>12345678</code>
+                  <strong>Sandbox Test Credentials:</strong><br/>
+                  <strong>BBVA (BE):</strong> user1 / 1234 (OTP: 012345)<br/>
+                  <strong>S-Pankki (FI):</strong> customera / 12345678
                 </div>
                 <button
                   className="btn btn-secondary"
