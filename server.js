@@ -26,11 +26,8 @@ if (PRIVATE_KEY_BASE64) {
 // In-memory storage for payments
 const payments = new Map();
 
-// Middleware
-app.use(cors({
-  origin: FRONTEND_URL === '*' ? true : FRONTEND_URL,
-  credentials: true
-}));
+// Middleware - allow all origins
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
 
@@ -75,17 +72,29 @@ async function enableBankingRequest(method, path, body = null) {
 
   if (body) {
     options.body = JSON.stringify(body);
+    console.log(`[Enable Banking] ${method} ${path}`);
+    console.log('[Enable Banking] Request body:', JSON.stringify(body, null, 2));
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, options);
+  const url = `${API_BASE_URL}${path}`;
+  console.log(`[Enable Banking] Calling: ${url}`);
+
+  const response = await fetch(url, options);
+  const responseText = await response.text();
+
+  console.log(`[Enable Banking] Response status: ${response.status}`);
+  console.log(`[Enable Banking] Response body: ${responseText.substring(0, 500)}`);
 
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`Enable Banking API error: ${response.status} - ${errorText}`);
-    throw new Error(`API error: ${response.status} - ${errorText}`);
+    console.error(`Enable Banking API error: ${response.status} - ${responseText}`);
+    throw new Error(`API error: ${response.status} - ${responseText}`);
   }
 
-  return response.json();
+  try {
+    return JSON.parse(responseText);
+  } catch (e) {
+    return { raw: responseText };
+  }
 }
 
 // Routes
@@ -95,28 +104,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// API info
-app.get('/', (req, res) => {
-  res.json({
-    name: 'PayFlow Open Banking Server',
-    version: '1.0.0',
-    status: 'running',
-    endpoints: {
-      health: 'GET /health',
-      banks: 'GET /api/banks/:country',
-      payments: 'GET /api/payments',
-      createPayment: 'POST /api/payments',
-      paymentStatus: 'GET /api/payments/:id',
-      connect: 'POST /api/connect',
-      callback: 'GET /callback'
-    }
-  });
-});
-
 // List available banks for a country
 app.get('/api/banks/:country', async (req, res) => {
   try {
     const { country } = req.params;
+    console.log(`[Banks] Fetching banks for country: ${country}`);
     const data = await enableBankingRequest('GET', `/aspsps?country=${country.toUpperCase()}`);
     res.json(data);
   } catch (error) {
@@ -127,20 +119,25 @@ app.get('/api/banks/:country', async (req, res) => {
 
 // Create a payment
 app.post('/api/payments', async (req, res) => {
+  console.log('[Payment] Received payment request:', JSON.stringify(req.body, null, 2));
+
   try {
     const { amount, creditorIban, creditorName, reference, bankName, bankCountry } = req.body;
 
     if (!amount || !creditorIban || !creditorName || !bankName || !bankCountry) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      console.log('[Payment] Missing required fields');
+      return res.status(400).json({ error: 'Missing required fields', received: req.body });
     }
 
-    // Create payment session with Enable Banking
+    const stateId = `payment_${Date.now()}`;
+
+    // Create payment session with Enable Banking - using /payments endpoint
     const paymentRequest = {
       aspsp: {
         name: bankName,
         country: bankCountry
       },
-      state: `payment_${Date.now()}`,
+      state: stateId,
       redirect_url: REDIRECT_URL,
       payment_request: {
         credit_transfer_payment: [{
@@ -161,10 +158,15 @@ app.post('/api/payments', async (req, res) => {
       }
     };
 
-    const data = await enableBankingRequest('POST', '/pis/sessions', paymentRequest);
+    console.log('[Payment] Creating payment session with Enable Banking...');
+
+    // Try /payments endpoint (the correct PIS endpoint)
+    const data = await enableBankingRequest('POST', '/payments', paymentRequest);
+
+    console.log('[Payment] Enable Banking response:', JSON.stringify(data, null, 2));
 
     // Store payment in memory
-    const paymentId = data.payment_id || paymentRequest.state;
+    const paymentId = data.payment_id || stateId;
     const payment = {
       id: paymentId,
       amount,
@@ -181,6 +183,8 @@ app.post('/api/payments', async (req, res) => {
 
     payments.set(paymentId, payment);
 
+    console.log('[Payment] Payment created successfully:', paymentId);
+
     res.json({
       success: true,
       paymentId,
@@ -188,7 +192,7 @@ app.post('/api/payments', async (req, res) => {
       payment
     });
   } catch (error) {
-    console.error('Error creating payment:', error);
+    console.error('[Payment] Error creating payment:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -206,7 +210,7 @@ app.get('/api/payments/:id', async (req, res) => {
     // If we have a session ID, check the status with Enable Banking
     if (payment.sessionId) {
       try {
-        const data = await enableBankingRequest('GET', `/pis/sessions/${payment.sessionId}`);
+        const data = await enableBankingRequest('GET', `/payments/${payment.sessionId}`);
         if (data.status) {
           payment.status = data.status;
           payments.set(id, payment);
@@ -267,6 +271,8 @@ app.post('/api/connect', async (req, res) => {
 app.get('/callback', (req, res) => {
   const { code, state, error, error_description } = req.query;
 
+  console.log('[Callback] Received callback:', { code: code ? 'present' : 'missing', state, error });
+
   if (error) {
     res.send(`
       <!DOCTYPE html>
@@ -315,7 +321,7 @@ app.get('/callback', (req, res) => {
       </head>
       <body>
         <div class="container">
-          <div class="icon">❌</div>
+          <div class="icon">X</div>
           <h1>Payment Failed</h1>
           <p>Something went wrong during the authorization process.</p>
           <div class="error-detail">
@@ -337,6 +343,7 @@ app.get('/callback', (req, res) => {
         payment.status = 'authorized';
         payment.authCode = code;
         payments.set(id, payment);
+        console.log('[Callback] Updated payment status to authorized:', id);
         break;
       }
     }
@@ -390,7 +397,7 @@ app.get('/callback', (req, res) => {
     </head>
     <body>
       <div class="container">
-        <div class="icon">✅</div>
+        <div class="icon">OK</div>
         <h1>Payment Authorized!</h1>
         <p>The bank authorization was successful.</p>
         ${state ? `<div class="state"><strong>Reference:</strong> ${state}</div>` : ''}

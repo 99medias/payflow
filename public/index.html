@@ -55,6 +55,7 @@
       color: white;
     }
     .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102,126,234,0.3); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     .btn-secondary { background: rgba(255,255,255,0.1); color: white; }
     .btn-secondary:hover { background: rgba(255,255,255,0.15); }
     .btn-small { padding: 8px 16px; font-size: 12px; }
@@ -99,6 +100,8 @@
     }
     .bank-card:hover { border-color: rgba(102,126,234,0.5); background: rgba(102,126,234,0.1); }
     .bank-card.selected { border-color: #667eea; background: rgba(102,126,234,0.2); }
+    .bank-card.mock { border-color: rgba(0,212,170,0.5); background: rgba(0,212,170,0.1); }
+    .bank-card.mock.selected { border-color: #00d4aa; background: rgba(0,212,170,0.2); }
     .bank-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
     .bank-country { font-size: 11px; color: #888; }
     .auth-url-box {
@@ -125,12 +128,26 @@
     .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .amount-display { font-size: 48px; font-weight: 700; text-align: center; margin: 20px 0; color: #00d4aa; }
+    .error-box {
+      background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.3);
+      padding: 16px; border-radius: 10px; margin-bottom: 16px; color: #ff6b6b; font-size: 13px;
+    }
+    .country-selector {
+      display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .country-btn {
+      padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.05); color: #aaa; cursor: pointer; font-size: 13px;
+      transition: all 0.2s;
+    }
+    .country-btn:hover { background: rgba(255,255,255,0.1); }
+    .country-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-color: transparent; }
   </style>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    // UPDATE THIS URL WITH YOUR RAILWAY DOMAIN
+    // API URL - no trailing slash
     const API_URL = 'https://payflow-production-3f7d.up.railway.app';
 
     const { useState, useEffect } = React;
@@ -148,11 +165,13 @@
 
       const fetchPayments = async () => {
         try {
+          console.log('[App] Fetching payments...');
           const res = await fetch(`${API_URL}/api/payments`);
           const data = await res.json();
+          console.log('[App] Payments received:', data);
           setPayments(data);
         } catch (err) {
-          console.error('Error fetching payments:', err);
+          console.error('[App] Error fetching payments:', err);
         } finally {
           setLoading(false);
         }
@@ -178,11 +197,11 @@
           <div className="stats">
             <div className="stat-card">
               <div className="stat-label">Total Received</div>
-              <div className="stat-value green">€{stats.total.toFixed(2)}</div>
+              <div className="stat-value green">EUR {stats.total.toFixed(2)}</div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Pending Amount</div>
-              <div className="stat-value yellow">€{stats.pending.toFixed(2)}</div>
+              <div className="stat-value yellow">EUR {stats.pending.toFixed(2)}</div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Total Transactions</div>
@@ -230,7 +249,7 @@
                         <div>{payment.bankName}</div>
                         <div style={{fontSize: 12, color: '#666'}}>{payment.bankCountry}</div>
                       </td>
-                      <td style={{fontWeight: 600}}>€{parseFloat(payment.amount).toFixed(2)}</td>
+                      <td style={{fontWeight: 600}}>EUR {parseFloat(payment.amount).toFixed(2)}</td>
                       <td style={{color: '#888', fontSize: 14}}>
                         {new Date(payment.createdAt).toLocaleDateString()}
                       </td>
@@ -254,60 +273,113 @@
       const [loading, setLoading] = useState(false);
       const [banks, setBanks] = useState([]);
       const [copied, setCopied] = useState(false);
+      const [error, setError] = useState(null);
+      const [selectedCountry, setSelectedCountry] = useState('BE');
       const [form, setForm] = useState({
         amount: '',
         creditorName: '',
-        creditorIban: 'FI4966010005485495',
-        reference: '',
-        bankCountry: 'FI'
+        creditorIban: 'BE68539007547034',
+        reference: ''
       });
       const [selectedBank, setSelectedBank] = useState(null);
       const [authUrl, setAuthUrl] = useState('');
 
+      const countries = [
+        { code: 'BE', name: 'Belgium' },
+        { code: 'FR', name: 'France' },
+        { code: 'DE', name: 'Germany' },
+        { code: 'NL', name: 'Netherlands' },
+        { code: 'FI', name: 'Finland' }
+      ];
+
       const fetchBanks = async (country) => {
         setLoading(true);
+        setError(null);
         try {
+          console.log(`[Modal] Fetching banks for ${country}...`);
           const res = await fetch(`${API_URL}/api/banks/${country}`);
           const data = await res.json();
-          setBanks(data.aspsps || []);
+          console.log('[Modal] Banks received:', data);
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          // Filter out Mock ASPSP from the API response (we add our own)
+          const filteredBanks = (data.aspsps || []).filter(b => b.name !== 'Mock ASPSP');
+          setBanks(filteredBanks);
         } catch (err) {
-          console.error('Error fetching banks:', err);
+          console.error('[Modal] Error fetching banks:', err);
+          setError(`Failed to fetch banks: ${err.message}`);
         } finally {
           setLoading(false);
         }
       };
 
+      const handleCountryChange = (countryCode) => {
+        setSelectedCountry(countryCode);
+        setSelectedBank(null);
+        fetchBanks(countryCode);
+      };
+
       const handleNext = () => {
         if (step === 1) {
-          fetchBanks(form.bankCountry);
+          fetchBanks(selectedCountry);
           setStep(2);
         }
       };
 
       const handleSelectBank = (bank) => {
+        console.log('[Modal] Selected bank:', bank);
         setSelectedBank(bank);
       };
 
       const handleCreatePayment = async () => {
-        if (!selectedBank) return;
+        if (!selectedBank) {
+          setError('Please select a bank');
+          return;
+        }
+
         setLoading(true);
+        setError(null);
+
+        const payload = {
+          amount: form.amount,
+          creditorIban: form.creditorIban,
+          creditorName: form.creditorName,
+          reference: form.reference || 'Payment',
+          bankName: selectedBank.name,
+          bankCountry: selectedBank.country
+        };
+
+        console.log('[Modal] Creating payment with payload:', payload);
+
         try {
           const res = await fetch(`${API_URL}/api/payments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...form,
-              bankName: selectedBank.name,
-              bankCountry: selectedBank.country
-            })
+            body: JSON.stringify(payload)
           });
+
+          console.log('[Modal] Response status:', res.status);
+
           const data = await res.json();
+          console.log('[Modal] Response data:', data);
+
+          if (!res.ok) {
+            throw new Error(data.error || `HTTP ${res.status}`);
+          }
+
           if (data.authUrl) {
+            console.log('[Modal] Got authUrl:', data.authUrl);
             setAuthUrl(data.authUrl);
             setStep(3);
+          } else {
+            throw new Error('No authorization URL received from server');
           }
         } catch (err) {
-          console.error('Error creating payment:', err);
+          console.error('[Modal] Error creating payment:', err);
+          setError(`Failed to create payment: ${err.message}`);
         } finally {
           setLoading(false);
         }
@@ -337,6 +409,12 @@
               <div className={`step ${step >= 3 ? 'active' : ''}`}>3</div>
             </div>
 
+            {error && (
+              <div className="error-box">
+                <strong>Error:</strong> {error}
+              </div>
+            )}
+
             {step === 1 && (
               <>
                 <div className="form-group">
@@ -364,7 +442,7 @@
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="FI..."
+                    placeholder="BE..."
                     value={form.creditorIban}
                     onChange={e => setForm({...form, creditorIban: e.target.value})}
                   />
@@ -381,26 +459,17 @@
                 </div>
                 <div className="form-group">
                   <label className="form-label">Bank Country</label>
-                  <select
-                    className="form-input"
-                    value={form.bankCountry}
-                    onChange={e => setForm({...form, bankCountry: e.target.value})}
-                  >
-                    <option value="FI">Finland</option>
-                    <option value="SE">Sweden</option>
-                    <option value="NO">Norway</option>
-                    <option value="DK">Denmark</option>
-                    <option value="DE">Germany</option>
-                    <option value="NL">Netherlands</option>
-                    <option value="FR">France</option>
-                    <option value="ES">Spain</option>
-                    <option value="IT">Italy</option>
-                    <option value="PT">Portugal</option>
-                    <option value="GB">United Kingdom</option>
-                    <option value="EE">Estonia</option>
-                    <option value="LV">Latvia</option>
-                    <option value="LT">Lithuania</option>
-                  </select>
+                  <div className="country-selector">
+                    {countries.map(c => (
+                      <button
+                        key={c.code}
+                        className={`country-btn ${selectedCountry === c.code ? 'active' : ''}`}
+                        onClick={() => setSelectedCountry(c.code)}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <button
                   className="btn btn-primary"
@@ -415,15 +484,30 @@
 
             {step === 2 && (
               <>
+                <div className="form-group">
+                  <label className="form-label">Select Country</label>
+                  <div className="country-selector">
+                    {countries.map(c => (
+                      <button
+                        key={c.code}
+                        className={`country-btn ${selectedCountry === c.code ? 'active' : ''}`}
+                        onClick={() => handleCountryChange(c.code)}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {loading ? (
                   <div className="loading"><div className="spinner"></div></div>
                 ) : (
                   <>
                     <div className="bank-grid">
-                      {/* Mock ASPSP for testing */}
+                      {/* Single Mock ASPSP for testing - always at top */}
                       <div
-                        className={`bank-card ${selectedBank?.name === 'Mock ASPSP' ? 'selected' : ''}`}
-                        onClick={() => handleSelectBank({ name: 'Mock ASPSP', country: form.bankCountry })}
+                        className={`bank-card mock ${selectedBank?.name === 'Mock ASPSP' ? 'selected' : ''}`}
+                        onClick={() => handleSelectBank({ name: 'Mock ASPSP', country: selectedCountry })}
                       >
                         <div className="bank-name">Mock ASPSP</div>
                         <div className="bank-country">Test Bank</div>
@@ -445,7 +529,9 @@
                       onClick={handleCreatePayment}
                       disabled={!selectedBank || loading}
                     >
-                      {loading ? 'Creating...' : 'Create Payment Request'}
+                      {loading ? (
+                        <>Creating... <span className="spinner" style={{width: 16, height: 16, display: 'inline-block', marginLeft: 8}}></span></>
+                      ) : 'Create Payment Request'}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -461,7 +547,7 @@
 
             {step === 3 && (
               <>
-                <div className="amount-display">€{parseFloat(form.amount).toFixed(2)}</div>
+                <div className="amount-display">EUR {parseFloat(form.amount).toFixed(2)}</div>
                 <p style={{textAlign: 'center', color: '#888', marginBottom: 20}}>
                   Share this link with your customer to complete the payment:
                 </p>
