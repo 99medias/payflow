@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PayFlow - Open Banking Payments</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
+    .app { padding: 30px; max-width: 1400px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+    .logo { font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .logo span { font-weight: 300; opacity: 0.7; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
+    .stat-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .stat-label { font-size: 14px; color: #888; margin-bottom: 8px; }
+    .stat-value { font-size: 32px; font-weight: 700; }
+    .stat-value.green { color: #00d4aa; }
+    .stat-value.yellow { color: #ffd93d; }
+    .stat-value.blue { color: #667eea; }
+    .card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .card-title { font-size: 18px; font-weight: 600; }
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102,126,234,0.3); }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: white; }
+    .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+    .btn-small { padding: 8px 16px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 16px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    th { color: #888; font-weight: 500; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .status {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-block;
+    }
+    .status.pending { background: rgba(255,217,61,0.15); color: #ffd93d; }
+    .status.authorized { background: rgba(0,212,170,0.15); color: #00d4aa; }
+    .status.completed { background: rgba(102,126,234,0.15); color: #667eea; }
+    .status.failed { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7); display: flex; align-items: center;
+      justify-content: center; z-index: 1000; backdrop-filter: blur(5px);
+    }
+    .modal {
+      background: #1a1a2e; border-radius: 20px; padding: 30px;
+      width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .modal-title { font-size: 20px; font-weight: 600; }
+    .close-btn { background: none; border: none; color: #888; font-size: 24px; cursor: pointer; }
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; margin-bottom: 8px; color: #888; font-size: 14px; }
+    .form-input {
+      width: 100%; padding: 14px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05); color: white; font-size: 16px;
+    }
+    .form-input:focus { outline: none; border-color: #667eea; }
+    .bank-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-height: 300px; overflow-y: auto; }
+    .bank-card {
+      padding: 16px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.03); cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .bank-card:hover { border-color: rgba(102,126,234,0.5); background: rgba(102,126,234,0.1); }
+    .bank-card.selected { border-color: #667eea; background: rgba(102,126,234,0.2); }
+    .bank-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+    .bank-country { font-size: 11px; color: #888; }
+    .auth-url-box {
+      background: rgba(0,0,0,0.3); padding: 16px; border-radius: 10px;
+      word-break: break-all; margin-bottom: 16px; font-size: 12px; color: #888;
+    }
+    .steps { display: flex; justify-content: center; margin-bottom: 24px; gap: 8px; }
+    .step {
+      width: 32px; height: 32px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; font-weight: 600;
+      background: rgba(255,255,255,0.1); color: #666;
+    }
+    .step.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+    .step.done { background: #00d4aa; color: white; }
+    .test-info {
+      background: rgba(102,126,234,0.1); border: 1px solid rgba(102,126,234,0.3);
+      padding: 16px; border-radius: 10px; margin-top: 16px; font-size: 13px;
+    }
+    .test-info strong { color: #667eea; }
+    .empty-state { text-align: center; padding: 60px 20px; color: #666; }
+    .empty-state svg { width: 80px; height: 80px; margin-bottom: 20px; opacity: 0.5; }
+    .copy-success { color: #00d4aa; font-size: 12px; margin-top: 8px; }
+    .loading { display: flex; align-items: center; justify-content: center; padding: 40px; }
+    .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .amount-display { font-size: 48px; font-weight: 700; text-align: center; margin: 20px 0; color: #00d4aa; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // UPDATE THIS URL WITH YOUR RAILWAY DOMAIN
+    const API_URL = '';
+
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [payments, setPayments] = useState([]);
+      const [showModal, setShowModal] = useState(false);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        fetchPayments();
+        const interval = setInterval(fetchPayments, 10000);
+        return () => clearInterval(interval);
+      }, []);
+
+      const fetchPayments = async () => {
+        try {
+          const res = await fetch(`${API_URL}/api/payments`);
+          const data = await res.json();
+          setPayments(data);
+        } catch (err) {
+          console.error('Error fetching payments:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const stats = {
+        total: payments.filter(p => p.status === 'authorized' || p.status === 'completed')
+          .reduce((sum, p) => sum + parseFloat(p.amount), 0),
+        pending: payments.filter(p => p.status === 'pending')
+          .reduce((sum, p) => sum + parseFloat(p.amount), 0),
+        count: payments.length
+      };
+
+      return (
+        <div className="app">
+          <header className="header">
+            <div className="logo">PayFlow <span>Open Banking</span></div>
+            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+              + New Payment
+            </button>
+          </header>
+
+          <div className="stats">
+            <div className="stat-card">
+              <div className="stat-label">Total Received</div>
+              <div className="stat-value green">€{stats.total.toFixed(2)}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Pending Amount</div>
+              <div className="stat-value yellow">€{stats.pending.toFixed(2)}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Total Transactions</div>
+              <div className="stat-value blue">{stats.count}</div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Recent Payments</div>
+              <button className="btn btn-secondary btn-small" onClick={fetchPayments}>
+                Refresh
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="loading"><div className="spinner"></div></div>
+            ) : payments.length === 0 ? (
+              <div className="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                  <rect x="2" y="5" width="20" height="14" rx="2"/>
+                  <line x1="2" y1="10" x2="22" y2="10"/>
+                </svg>
+                <p>No payments yet. Create your first payment request!</p>
+              </div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Bank</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map(payment => (
+                    <tr key={payment.id}>
+                      <td>
+                        <div style={{fontWeight: 600}}>{payment.creditorName}</div>
+                        <div style={{fontSize: 12, color: '#666'}}>{payment.reference || '-'}</div>
+                      </td>
+                      <td>
+                        <div>{payment.bankName}</div>
+                        <div style={{fontSize: 12, color: '#666'}}>{payment.bankCountry}</div>
+                      </td>
+                      <td style={{fontWeight: 600}}>€{parseFloat(payment.amount).toFixed(2)}</td>
+                      <td style={{color: '#888', fontSize: 14}}>
+                        {new Date(payment.createdAt).toLocaleDateString()}
+                      </td>
+                      <td><span className={`status ${payment.status}`}>{payment.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {showModal && (
+            <PaymentModal onClose={() => setShowModal(false)} onSuccess={() => { setShowModal(false); fetchPayments(); }} />
+          )}
+        </div>
+      );
+    }
+
+    function PaymentModal({ onClose, onSuccess }) {
+      const [step, setStep] = useState(1);
+      const [loading, setLoading] = useState(false);
+      const [banks, setBanks] = useState([]);
+      const [copied, setCopied] = useState(false);
+      const [form, setForm] = useState({
+        amount: '',
+        creditorName: '',
+        creditorIban: 'FI4966010005485495',
+        reference: '',
+        bankCountry: 'FI'
+      });
+      const [selectedBank, setSelectedBank] = useState(null);
+      const [authUrl, setAuthUrl] = useState('');
+
+      const fetchBanks = async (country) => {
+        setLoading(true);
+        try {
+          const res = await fetch(`${API_URL}/api/banks/${country}`);
+          const data = await res.json();
+          setBanks(data.aspsps || []);
+        } catch (err) {
+          console.error('Error fetching banks:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleNext = () => {
+        if (step === 1) {
+          fetchBanks(form.bankCountry);
+          setStep(2);
+        }
+      };
+
+      const handleSelectBank = (bank) => {
+        setSelectedBank(bank);
+      };
+
+      const handleCreatePayment = async () => {
+        if (!selectedBank) return;
+        setLoading(true);
+        try {
+          const res = await fetch(`${API_URL}/api/payments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...form,
+              bankName: selectedBank.name,
+              bankCountry: selectedBank.country
+            })
+          });
+          const data = await res.json();
+          if (data.authUrl) {
+            setAuthUrl(data.authUrl);
+            setStep(3);
+          }
+        } catch (err) {
+          console.error('Error creating payment:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const copyToClipboard = () => {
+        navigator.clipboard.writeText(authUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      };
+
+      return (
+        <div className="modal-overlay" onClick={onClose}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">
+                {step === 1 && 'Payment Details'}
+                {step === 2 && 'Select Bank'}
+                {step === 3 && 'Authorization Link'}
+              </div>
+              <button className="close-btn" onClick={onClose}>&times;</button>
+            </div>
+
+            <div className="steps">
+              <div className={`step ${step >= 1 ? (step > 1 ? 'done' : 'active') : ''}`}>1</div>
+              <div className={`step ${step >= 2 ? (step > 2 ? 'done' : 'active') : ''}`}>2</div>
+              <div className={`step ${step >= 3 ? 'active' : ''}`}>3</div>
+            </div>
+
+            {step === 1 && (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Amount (EUR)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    placeholder="0.00"
+                    value={form.amount}
+                    onChange={e => setForm({...form, amount: e.target.value})}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Customer Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="John Doe"
+                    value={form.creditorName}
+                    onChange={e => setForm({...form, creditorName: e.target.value})}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Your IBAN (receiving account)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="FI..."
+                    value={form.creditorIban}
+                    onChange={e => setForm({...form, creditorIban: e.target.value})}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Reference / Description</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Invoice #123"
+                    value={form.reference}
+                    onChange={e => setForm({...form, reference: e.target.value})}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Bank Country</label>
+                  <select
+                    className="form-input"
+                    value={form.bankCountry}
+                    onChange={e => setForm({...form, bankCountry: e.target.value})}
+                  >
+                    <option value="FI">Finland</option>
+                    <option value="SE">Sweden</option>
+                    <option value="NO">Norway</option>
+                    <option value="DK">Denmark</option>
+                    <option value="DE">Germany</option>
+                    <option value="NL">Netherlands</option>
+                    <option value="FR">France</option>
+                    <option value="ES">Spain</option>
+                    <option value="IT">Italy</option>
+                    <option value="PT">Portugal</option>
+                    <option value="GB">United Kingdom</option>
+                    <option value="EE">Estonia</option>
+                    <option value="LV">Latvia</option>
+                    <option value="LT">Lithuania</option>
+                  </select>
+                </div>
+                <button
+                  className="btn btn-primary"
+                  style={{width: '100%'}}
+                  onClick={handleNext}
+                  disabled={!form.amount || !form.creditorName || !form.creditorIban}
+                >
+                  Continue
+                </button>
+              </>
+            )}
+
+            {step === 2 && (
+              <>
+                {loading ? (
+                  <div className="loading"><div className="spinner"></div></div>
+                ) : (
+                  <>
+                    <div className="bank-grid">
+                      {/* Mock ASPSP for testing */}
+                      <div
+                        className={`bank-card ${selectedBank?.name === 'Mock ASPSP' ? 'selected' : ''}`}
+                        onClick={() => handleSelectBank({ name: 'Mock ASPSP', country: form.bankCountry })}
+                      >
+                        <div className="bank-name">Mock ASPSP</div>
+                        <div className="bank-country">Test Bank</div>
+                      </div>
+                      {banks.map(bank => (
+                        <div
+                          key={bank.name}
+                          className={`bank-card ${selectedBank?.name === bank.name ? 'selected' : ''}`}
+                          onClick={() => handleSelectBank(bank)}
+                        >
+                          <div className="bank-name">{bank.name}</div>
+                          <div className="bank-country">{bank.country}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      className="btn btn-primary"
+                      style={{width: '100%', marginTop: 20}}
+                      onClick={handleCreatePayment}
+                      disabled={!selectedBank || loading}
+                    >
+                      {loading ? 'Creating...' : 'Create Payment Request'}
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{width: '100%', marginTop: 10}}
+                      onClick={() => setStep(1)}
+                    >
+                      Back
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+
+            {step === 3 && (
+              <>
+                <div className="amount-display">€{parseFloat(form.amount).toFixed(2)}</div>
+                <p style={{textAlign: 'center', color: '#888', marginBottom: 20}}>
+                  Share this link with your customer to complete the payment:
+                </p>
+                <div className="auth-url-box">{authUrl}</div>
+                <button className="btn btn-primary" style={{width: '100%'}} onClick={copyToClipboard}>
+                  Copy Payment Link
+                </button>
+                {copied && <div className="copy-success">Copied to clipboard!</div>}
+                <button
+                  className="btn btn-secondary"
+                  style={{width: '100%', marginTop: 10}}
+                  onClick={() => window.open(authUrl, '_blank')}
+                >
+                  Open Link (Test it yourself)
+                </button>
+                <div className="test-info">
+                  <strong>Mock ASPSP Test Credentials:</strong><br/>
+                  Username: <code>customera</code><br/>
+                  Password: <code>12345678</code>
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  style={{width: '100%', marginTop: 16}}
+                  onClick={onSuccess}
+                >
+                  Done
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
