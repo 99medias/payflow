@@ -146,11 +146,13 @@ app.post('/api/payments', async (req, res) => {
         credit_transfer_transaction: [{
           instruction_id: `INS${timestamp}`,
           end_to_end_id: `E2E${timestamp}`,
-          creditor: {
-            name: creditorName
-          },
-          creditor_account: {
-            iban: creditorIban
+          beneficiary: {
+            creditor: {
+              name: creditorName
+            },
+            creditor_account: {
+              iban: creditorIban
+            }
           },
           instructed_amount: {
             currency: 'EUR',
