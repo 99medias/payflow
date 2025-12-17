@@ -151,7 +151,8 @@ app.post('/api/payments', async (req, res) => {
               name: creditorName
             },
             creditor_account: {
-              iban: creditorIban
+              scheme_name: 'IBAN',
+              identification: creditorIban
             }
           },
           instructed_amount: {
