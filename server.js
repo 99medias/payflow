@@ -130,8 +130,9 @@ app.post('/api/payments', async (req, res) => {
     }
 
     const stateId = `payment_${Date.now()}`;
+    const timestamp = Date.now();
 
-    // Create payment session with Enable Banking - using /payments endpoint
+    // Create payment session with Enable Banking - using correct API format
     const paymentRequest = {
       aspsp: {
         name: bankName,
@@ -139,10 +140,12 @@ app.post('/api/payments', async (req, res) => {
       },
       state: stateId,
       redirect_url: REDIRECT_URL,
+      psu_type: 'personal',
+      payment_type: 'SEPA',
       payment_request: {
-        credit_transfer_payment: [{
-          instruction_id: `INS${Date.now()}`,
-          end_to_end_id: `E2E${Date.now()}`,
+        credit_transfer_transaction: [{
+          instruction_id: `INS${timestamp}`,
+          end_to_end_id: `E2E${timestamp}`,
           creditor: {
             name: creditorName
           },
@@ -160,7 +163,7 @@ app.post('/api/payments', async (req, res) => {
 
     console.log('[Payment] Creating payment session with Enable Banking...');
 
-    // Try /payments endpoint (the correct PIS endpoint)
+    // Use /payments endpoint for PIS
     const data = await enableBankingRequest('POST', '/payments', paymentRequest);
 
     console.log('[Payment] Enable Banking response:', JSON.stringify(data, null, 2));
